@@ -1,0 +1,17 @@
+#!./smsh
+# recurs3 using regular fork-exec-wait
+#
+	if test _$1 = _
+	then
+		echo recursion using fork-exec-wait
+	fi
+
+	echo entering recurs3 with arg1 = $1
+	if test _$1 = _xxxxxx
+	then
+		echo done
+		exit
+	fi
+	echo about to run ./recurs3 $1x
+	./recurs3 $1x
+	echo back from recurs3

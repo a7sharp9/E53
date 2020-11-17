@@ -1,0 +1,25 @@
+
+README for pong
+
+  Student: Yuri Machkasov
+  Date: 03/24/2018
+
+Summary:
+
+  This submission contains the files:
+
+    pong.c    -- my solution to the project
+    ball.h, ball.c -- declarations and functions dealing with
+				handling the ball movements
+    paddle.h, paddle.c -- declarations and functions dealing with
+				handling the paddle movements and interactions
+	drawable.c, drawable.h -- declarations and functions dealing with
+				drawing and printing on the screen using a mutex
+	alarmlib.c, alarmlib.h -- declaration and function for issuing
+				periodic ALRM events (code borrowed from lecture sample) 
+    Makefile    -- the makefile; builds the target
+    Plan        -- a description of the design and operation of my code
+    README -- this file
+
+Please set tabstop to 4 to view
+

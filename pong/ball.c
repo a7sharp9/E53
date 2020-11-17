@@ -1,0 +1,236 @@
+/*
+ * ball.c
+ *
+ *  Created on: Mar 11, 2018
+ *      Author: Yuri
+ */
+
+#include "ball.h"
+#include "boundaries.h"
+#include "paddle.h"
+#include  "alarmlib.h"
+#include <signal.h>
+#include <curses.h>
+#include <stdio.h>
+#include <time.h>
+#include <stdlib.h>
+#include "drawable.h"
+
+#define BALL_CHAR  'o'
+#define TICKS_PER_SEC   50
+
+static struct ball {
+	struct drawable position; // the current position
+	struct boundaries boundaries; // the game court boundaries
+	int xdirection;	// current direction along x-axis (1 for right, -1 left)
+	int ydirection; // current direction along y-axis (1 for down, -1 up)
+	int x_ticks;	// counting down the ticks to move along x-axis
+	int y_ticks;	// counting down the ticks to move along y-axis
+	int x_delay;	// move along x-axis every this number of ticks
+	int y_delay;	// move along x-axis every this number of ticks
+	int ticker_counter;	// cumulative number of ticks elapsed
+} game_ball = {{-1, -1, 0, -1}, {0, 0, 0, 0}, 0, 0, 0, 0, 0, 0, 0};
+
+/**
+ * randomize_xy_delay - assign the initial speed of the ball along
+ * each axis by setting the number of ticks that need to elapse before
+ * ball moves in this direction. The assignment is pseudo-random within
+ * the specified ranges; on average should be slightly faster horizontally.
+ * args:
+ * x_delay, y_delay: pointers to the corresponding delay values
+ */
+static void randomize_xy_delay (int *x_delay, int *y_delay) {
+	*x_delay = (random () % 5) + 2; /* 2 to 6 */
+	*y_delay = (random () % 5) + 4; /* 4 to 8 */
+}
+
+/**
+ * tweak_xy_delay - randomly decrement, leave unchanged or increment the
+ * delays along the axes. The probability of each action is approximately
+ * the same
+ * args:
+ * x_delay, y_delay: pointers to the corresponding delay values
+ */
+static void tweak_xy_delay (int *x_delay, int *y_delay) {
+	*x_delay += (random () % 3) - 1; /* -1, 0 or 1 */
+	*y_delay += (random () % 3) - 1; /* -1, 0 or 1 */
+}
+
+#define MS_FMT "%M:%S"
+
+/**
+ * format_elapsed - using the cumulative number of ticks handled,
+ * form a string that represents the elapsed game time in minutes and
+ * seconds (up to 1 hr)
+ * args:
+ * formatted_interval - buffer to hold the formatted time (at least MAXTIMELEN)
+ */
+void format_elapsed (char *formatted_interval) {
+	time_t interval = game_ball.ticker_counter / TICKS_PER_SEC;
+	while (interval >= MAXTIME)
+		interval -= MAXTIME; // strip away hours
+
+	struct tm *time_str = gmtime (&interval);	/* seconds since time 0 */
+
+	// convert to minutes and seconds
+	strftime (formatted_interval, MAXTIMELEN, MS_FMT, time_str);
+}
+
+/**
+ * ticker_set - start the alarm, sending TICKS_PER_SEC signals every second
+ */
+void ticker_set () {
+	set_ticker (1000 / TICKS_PER_SEC);
+}
+
+/**
+ * ticker_quit - stop sending interrupt signals
+ */
+void ticker_quit () {
+	set_ticker (0);
+}
+
+/**
+ * ball_draw - put the ball character at the specified position on the screen
+ * (excluding boundaries of the court), or put a blank in that position
+ * args:
+ * erase - if 0, draw the ball, otherwise draw the blank
+ * Note: uses draw_moveable, which acquires and releases a mutex to prevent
+ * concurrent screen updates
+ */
+static void ball_draw (int erase) {
+	if (game_ball.position.x != game_ball.boundaries.right_edge &&
+			game_ball.position.x != game_ball.boundaries.left_edge &&
+			game_ball.position.y != game_ball.boundaries.bottom_row &&
+			game_ball.position.y != game_ball.boundaries.top_row)
+		draw_moveable (&game_ball.position, erase);
+}
+
+/**
+ * print_elapsed_seconds: keeps a running total of the game play time,
+ * displaying it in MM:SS format above the top right corner of the game court
+ * Note: uses mvaddstr_exclusive, which acquires and releases a mutex to prevent
+ * concurrent screen updates
+ */
+void print_elapsed_seconds () {
+	char fmttime [MAXTIMELEN];
+	format_elapsed (fmttime); // obtain and format the cumulative time
+	mvaddstr_exclusive (game_ball.boundaries.top_row - 1, // draw
+				game_ball.boundaries.right_edge - MAXTIMELEN,
+				fmttime);
+}
+
+/**
+ * ball_init - given the dimensions of the game court, initialize
+ * the ball structure, place it at the middle of the court on the left
+ * edge, and set the initial random speed and direction
+ */
+void ball_init (struct boundaries const *boundaries) {
+	if (game_ball.position.x > 0) // ball already was somewhere
+		ball_draw (1); // erase it from there
+
+	int x_delay;
+	int y_delay;
+	randomize_xy_delay (&x_delay, &y_delay); // assign randomized delay values
+
+	game_ball = // initialize
+		(struct ball) {
+			{boundaries->left_edge,
+			(boundaries->top_row + boundaries->bottom_row) / 2, // middle row
+				BALL_CHAR, 1}, // length along y-axis is 1
+			*boundaries, 1, 1, x_delay, y_delay,
+			x_delay, y_delay, // will be counted down from here
+			game_ball.ticker_counter // cumulative from previous serves
+	};
+	// no need to draw - it's at the left edge
+}
+
+/**
+ * ball_move - the handler for signals generated by the ticker, will decide
+ * if we need to move the ball in either direction, bounce it against the
+ * walls or the paddle, or trigger the loss of the serve
+ * also will increment and redisplay the cumulative game time if enough
+ * ticks elapsed to advanced it a whole second
+ */
+void ball_move () {
+	struct sigaction action_ignore;
+	action_ignore.sa_handler = SIG_IGN;
+	struct sigaction current_action;
+	sigaction (SIGALRM, &action_ignore, &current_action); // ignore additional
+
+	game_ball.ticker_counter ++;
+
+	int y = game_ball.position.y;
+	int x = game_ball.position.x;
+	int should_move = 0;
+
+	if (--game_ball.y_ticks <= 0) { // at least y_delay ticks have elapsed
+		y += game_ball.ydirection;	// move one column in the current direction
+		game_ball.y_ticks = game_ball.y_delay; // reset the countdown
+		should_move = 1;				// to trigger redraw
+	}
+
+	if (--game_ball.x_ticks <= 0) { // at least x_delay ticks have elapsed
+		x += game_ball.xdirection;	// move one row in the current direction
+		game_ball.x_ticks = game_ball.x_delay; // reset the countdown
+		should_move = 1;				// to trigger redraw
+	}
+
+	if (should_move) { // need to move and redraw the ball
+		ball_draw (1); // erase from the previous position
+		game_ball.position.x = x, game_ball.position.y = y; // move
+		ball_draw (0);	// draw in the new position
+		bounce_or_lose (); // check if contact with the paddle or went off
+							// the right margin
+	}
+
+	if (game_ball.ticker_counter % TICKS_PER_SEC == 0)
+						// whole number of seconds accumulated
+		print_elapsed_seconds ();	// redisplay game time
+
+	sigaction (SIGALRM, &current_action, NULL); // restore previous handler
+}
+
+/**
+ * ball_bounce - check the position of the ball against the coordinates of the
+ * court boundaries. If at the left edge, change x-direction; if at top or
+ * bottom, change y-direction. If at right edge, check if the paddle is there
+ * in this row; if yes, change x-direction and randomly increment/decrement
+ * ball speed, if not - ball lost
+ * return:
+ * 0 if not at either edge
+ * 1 if bounced against a wall or the paddle
+ * -1 if at the right edge, but no paddle there
+ */
+int ball_bounce () {
+	int ret = 0;
+
+	if (game_ball.position.y == game_ball.boundaries.top_row + 1) {
+		game_ball.ydirection = 1; // hit the top, now going down
+		ret = 1;
+	} else if (game_ball.position.y == game_ball.boundaries.bottom_row - 1) {
+		game_ball.ydirection = -1; // hit the bottom, now going up
+		ret = 1;
+	}
+
+	if (game_ball.position.x == game_ball.boundaries.left_edge + 1) {
+		game_ball.xdirection = 1; // hit the left edge, now going right
+		ret = 1;
+	} else if (game_ball.position.x == game_ball.boundaries.right_edge - 1) {
+		// at the right edge
+		if (paddle_contact (game_ball.position.y,
+				game_ball.boundaries.right_edge)) {
+			game_ball.xdirection = -1; // hit the paddle, now going left
+			tweak_xy_delay (&game_ball.x_delay, &game_ball.y_delay);
+									   // randomly adjust speed
+			ret = 1;
+		} else { // missed it
+			ret = -1; // ball lost
+		}
+	}
+
+	return (ret);
+}
+
+
+

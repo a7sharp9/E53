@@ -1,0 +1,2 @@
+/bin/echo \$Y\\$A$FIVE$FIVE
+exit

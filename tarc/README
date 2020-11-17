@@ -1,0 +1,33 @@
+
+README for tarc
+
+  Student: Yuri Machkasov
+  Date: 02/18/2018
+
+Summary:
+
+  This submission contains the files:
+
+    tarc.c     -- the main () function as well as the wrapper for
+                 archiving files on the command line in sequence
+    tarutils.h -- constants, message formats and signatures for the
+                  publicly visible functions from tarutils.c
+    tarutils.c -- the principal logic for formatting correct archive entries
+                  for files or directories
+    msgutils.h -- signatures for the publicly visible functions from
+                  msgutils.c
+    Makefile   -- the makefile; builds the target and provides for the
+                   testing (target "make test")
+    Plan       -- a description of the design and operation of my code
+    typescript -- a sample run, including the result of the test script
+                  and some boundary conditions not covered (a name that is
+                  too long and an attempt to archive a character device)
+    README     -- this file
+
+  Please set tabstop to 4 to view.
+
+Notes:
+
+The utilities in msgutils assume that we are dealing with one file at a time -
+that write_file () in tarutils.c, which initializes, uses and deconstructs the
+messaging system, is never called in parallel. 

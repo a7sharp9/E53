@@ -1,0 +1,73 @@
+Design Document for wsng
+-----------------------------------------------------------
+Code by: Yuri Machkasov
+Date: 04/24/2018
+History: Version 0.1
+-----------------------------------------------------------
+
+Please set tabstop to 4 to view.
+
+Purpose:
+	wsng is a simple HTTP server that complies with a subset of HTTP
+protocol. The functionality implemented includes listing web directories 
+(also correctly handles index files) and transferring file contents
+according to HTTP content type. The content type handlers are user-configurable
+through a file read in on startup; some common types are included OOB. Only GET
+and HEAD requests are supported.
+ 
+Outline:
+	After the configuration (including port, web home directory and optionally
+additional content types) is read in, the main loop opens a socket, binds
+to it and listens. If a request comes in, the process forks an executor of the
+request and continues listening (exited child processes are collected through
+signal handling).
+	If the request is parsed successfully, the type of the requested item is 
+determined based on its extension, and the appropriate handler is selected
+from a table; an HTTP header is formed and returned, followed by either the 
+output of the command represented by this file (if it is an CGI program/script),
+the listing of a directory, or file  contents (if it is accessible). For HEAD 
+requests or if any error occurs, a header is returned alone, with the correct 
+HTTP status. 	
+
+
+Features:
+
+Correctly handles the presence of index files (index.html/index.cgi) in 
+responses to GET requests on directories.
+Any malformed request returns a 400 error.
+Any request other than GET or HEAD returns a 501 error.
+Requests for non-existent files return a 404 error.
+Requests for unreadable or, in case of CGI and directory, unexecable file 
+return a 403 error.
+The output of any command executed as a CGI is expected to contain, as first
+two lines, the "Content-type" part of the HTTP header, and an empty line.
+The server handles arguments for passing through to CGI commands, if they are
+specified in the request in the form of <path>?<args>. The arguments are not
+parsed in any way.
+The program expects a configuration file; it can either be specified through
+the argument "-c <file path>", or is assumed to be named "wsng.conf" in the
+server directory.
+The configuration file contains entries in the form <parameter> <value> 
+(divided by whitespace). The acceptable parameters are "port" (the port number
+for the socket; 80 if not specified), "server_root" (the top-level web directory
+on local disk; the server program directory if not specified), and optional
+entries of the format "type <file type> <content-type>", which specify
+the Content-type field in the returned HTTP header. OOB, the configured types
+are "jpg", "jpeg", "html", "gif" and "text"; all other files are marked as
+plain text (this can also be overridden by using the special file type of 
+DEFAULT: "type DEFAULT <default-content-type>" will cause the server to return
+all unknown file types with the Content-type set to <default-content-type> in
+the header). There is a maximum of 20 additional content types that can be 
+listed; the contet types for the builtin file types can be redefined.
+
+File Structure:
+	main () does setup of the socket, internal structures and signal handling, 
+	processing of configuration file, main loop and respond () function,
+	which forks on each request, calls read_request () and 
+		process_request (), which validates the request, sanitizes it for
+		presence of ".." entries on file path, determines the request type
+		and finds the appropriate handler function in the table. The handler
+		is then invoked, the response is formed and puched into the socket.  
+	
+Notes:
+

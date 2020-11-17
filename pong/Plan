@@ -1,0 +1,107 @@
+Design Document for pong
+-----------------------------------------------------------
+Code by: Yuri Machkasov
+Date: 03/24/2018
+History: Version 0.1
+-----------------------------------------------------------
+
+Please set tabstop to 4 to view.
+
+Purpose:
+
+The purpose of pong is to simulate (using curses ASCII graphics) a single-
+player game that consists of a ball bouncing off the walls of the court and
+the paddle at its right edge, the vertical position of which is controlled 
+by the user through the keyboard. 
+The goal is to keep the ball in play for as long as possible.
+
+Ouline:
+
+There are no command-line arguments. main () initializes the structures
+for the ball, the paddle and the game court, displays the court and 
+informational strings, then blocks on user input. On processing the
+character corresponding to a "serve", the program begins issuing ALRM
+signals (every 20 msec), caught by the ball handling function; the ball
+then moves one row or column as soon as enough "ticks" elapsed since the
+previous movement. These amounts are independent for movement along each
+axis, and are assigned quazi-randomly (within certain ranges) for every
+serve. 
+The paddle movements are handled synchronously when user inputs characters
+corresponding to up or down movement.
+When the ball encounters the boundaries of the court, it "bounces", that is,
+reverses either horizontal or vertical direction when reaching the left
+or top/bottom respectively.
+Upon reaching the right edge of the court, the ball handling function checks
+if the row in which ball is located is also occupied by a character belonging
+to the paddle. If it is so, then the ball reverses the y-direction, the speed
+of the ball is adjusted quazi-randomly (by one tick up or down, or left 
+unchanged, independently in either direction) and the game continues; if not,
+the ball is considered "lost", the game pauses and the new serve is prepared.
+After a predetermined number of serves result in lost balls, the game displays
+the cumulative time and ends.
+
+Features:
+
+While the ball is in play, the asynchronous ball handler and the synchronous
+paddle movement function both seek to update the screen: the former for the
+"moving" (erasing and redrawing) the ball and the cumulative game time
+display, and the latter for moving the image of the paddle. Race condition
+may occur if, for example, the ALRM signal arrives while the cursor is
+being moved for paddle drawing. To eliminate it, the program farms off the
+in-play drawing to a pair of utility functions (in drawable.c) that acquire
+and release a mutually-exclusive lock. The drawing of the court and initial
+position of the paddle is handled in a regular fashion, since the ALRM events
+are not being generated at that time.
+
+Layering:
+	main () calls:
+		set_up () -- polls the size of the screen, initializes
+			boundaries, ball and paddle structures, draws the court and
+			informational messages, and blocks on keyboard input
+		serve () -- if the ball is not in play and serves are available,
+			starts the game and begins asynchronous handling of the ball
+		paddle_down () / paddle_up () -- upon user input, synchronously
+			moves the paddle
+		wrap_up () -- if the keyboard command for the end of the game is
+			received, stops blocking, returns to the previous screen
+			and exits
+
+	In addition to that, two functions are assigned to handlers of signals:
+	court_resize () catches SIGWINCH and, if the ball is not in play, 
+		adjusts the size of the court to correspond to the new dimensions
+		of the screen (as well as keeping the size of the paddle approximately
+		one third of its height).
+	ball_move () catches SIGALRM issued by the "ticker" using the system clock
+		if the ball is in play, and handles the movement and bouncing of the
+		ball
+	Both of these ignore additional signals while working
+
+File Structure:
+
+	pong.c	-- main (), set_up (), wrap_up (), functions for displaying the
+		court and initializing boundaries, preparing and performing the serve,
+		and also bounce_or_lose (), the function that handles "ball lost"
+		conditions. Declares the global game structure.
+	paddle.c -- functions for moving the paddle, and also paddle_contact (),
+		which determines if a paddle segment is present at the specified
+		coordinates. Declares the global paddle structure.
+	paddle.h -- declares the signatures for public functions in paddle.c
+	ball.c -- functions for moving the ball, determining the "bouncing"
+		conditions, and starting ("in play") and stopping the alarm clock; 
+		also keeps track of the cumulative game time, formats it in
+		minutes and seconds and displays on the screen. Declares the global
+		ball structure.
+	ball.h -- declares the signatures for public functions in ball.c
+	drawable.c -- functions for drawing the ball and/or paddle and displaying
+		a line of text on the screen, while avoiding a race condition in
+		changing the screen by acquiring and releasing a mutex.
+	drawable.h -- declares the structure (part of the ball and the paddle
+		structures) holding the position and length of a screen object,
+		and signatures for functions in drawable.c
+	boundaries.h -- declares the structure (part of ball, paddle and game
+		structures) holding the information for the game field boundaries
+
+	alarmlib.c, alarmlib.h - "alarm clock" utility borrowed from lecture
+		samples
+	
+

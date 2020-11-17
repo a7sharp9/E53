@@ -1,0 +1,8 @@
+FIVE=5
+Y=3
+A=X
+expr $FIVE + $Y
+expr $FIVE$Y - 1
+echo $Y/$Y.$FIVE
+/bin/echo \$Y\\$A$FIVE$FIVE
+

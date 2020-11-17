@@ -1,0 +1,1 @@
+sttyl.o: ../sttyl.c

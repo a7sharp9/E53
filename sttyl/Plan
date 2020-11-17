@@ -1,0 +1,75 @@
+Design Document for sttyl
+-----------------------------------------------------------
+Code by: Yuri Machkasov
+Date: 02/28/2018
+History: Version 0.1
+-----------------------------------------------------------
+
+Purpose:
+
+The purpose of sttyl is to set one or more tty flags (or attributes), or output
+a subset of those flags and attributes. As near as possible, the functionality 
+of the program mimics the behavior of "/bin/stty", except it only handles a
+subset of flags that (1) are standard on any *NIX machine (not necessarily BSD)
+and (2) flags that have ranges (such as tab[0:3]) aren't handled.
+
+When sttyl is called with no arguments, it takes a snapshot of the current 
+settings of the current terminal, along with the speed and window size, outputs
+them and exits. Parameters with values are output as name-value pairs separated
+by "="; flags are output as either their code names (if set), or code names 
+prepended by "-", if unset. The printout is a subset of the result of "stty -a".
+
+Any arguments are taken to be directives to either set an attribute that has a
+value (output speed, window dimensions or a control character; in this case the
+next argument is taken to be the value to set it to), or set or clear a flag
+(in this case, the exact name of the flag means that the corresponding flag
+should be set, and if it is prepended with "-" - that it should be cleared).
+
+An invalid flag name, or an invalid (or missing) value for a parameter, results 
+in an error and no settings being saved.
+
+Flags and parameter-value pairs can occur on the command line in any sequence;
+if the same flag or parameter is repeated, then the last occurrence is 
+controlling.
+
+Outline:
+
+main () obtains the current configuration structures (termios and size), 
+processes the input arguments, for each of them determines if it is
+a standalone flag or an attribute with a value and calls a function that sets
+the corresponding field in the structures. If all arguments were parsed and set
+correctly, it writes the structures back to terminal settings.
+
+Features:
+
+
+Layering:
+    main () calls
+        handle_argument_errors () - to ensure that required arguments are
+                                    present
+        archive_files () - the wrapper that for each file path on the 
+                           command line calls
+            write_file () - initializes messaging system, determines the
+                            absolute and relative path of the file being
+                            archived and calls write_file_from_path (),
+                            then appends error messages to the standard error,
+                            deconstructs the messaging system and returns the
+                            status  
+                write_file_from_path () - formats a correct ustar header block,
+                                          then either write the file contents
+                                          or recursively descends (depth-first)
+                                          if it is a directory
+        
+File Structure:
+
+tarc.c - main (), archive_files () and service functions for error printout
+tarutils.h - defines constants, error message formats and externally visible
+    function signatures
+tarutils.c - contains the principal functionality, including the formatting
+of correct header and content blocks, logic for handling recursive writing
+of directories, and error reporting
+msgutils.h - defines externally visible function signatures for the messaging
+    system
+msgutils.c - the quick message reporting package, featuring reallocatable
+    message buffer; is not thread-safe
+

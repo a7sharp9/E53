@@ -1,0 +1,8 @@
+README -- ~lib215/hw/llast/samples
+
+These wtmp files are all generated on a GNU/Linux machine.
+
+The format of wtmp files varies from one version of Unix to
+another.  The version on Mac OSX is very different from these.
+If you use AIX or HPUX or FreeBSD, please consult your online
+manuals for their file format.

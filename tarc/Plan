@@ -1,0 +1,69 @@
+Design Document for tarc
+-----------------------------------------------------------
+Code by: Yuri Machkasov
+Date: 02/18/2018
+History: Version 0.1
+	Version 0.2: used system constant ACCESSPERMS instead of number value
+	Version 0.3: used readdir_r instead of readdir in recursive function
+-----------------------------------------------------------
+
+Purpose:
+
+The purpose of tarc is to create a tar archive (in the standard "ustar" format)
+of one or more files specified on the command line. As near as possible, the
+functionality of the program duplicates the behavior of "/bin/tar cf", with the
+additional restrictions on the length of the path of the files being archived
+(limited to 100 characters) and the types of files handles (only directories,
+symlinks, named pipes and regular files are supported; hard links are treated
+as regular files - that is, the archive contains a copy of the contents).
+
+tarc expects at least two arguments on the command line; if they are not
+present, the program exits with an error. The first is assumed to be the name 
+of the archive to be created. The second and all subsequent ones are files (or
+directories) to be archived. No other options are supported.  
+
+Ouline:
+
+main () opens a descriptor for the file specified as the first argument, then
+cycles through the remaining arguments, calling write_file () on each and
+collecting the accumulating errors in the messaging system from msgutils.{h,c},
+then prints out the errors (if any) to the standard error and exits, with a 
+non-zero status if at least one error was encountered.
+
+Features:
+
+To simplify the program logic, a rudimentary messaging system with expandable
+buffer is introduced. All error codes are keyed to message formats used to
+construct the messages, which are then appended to the messaging buffer. It is
+then possible to cycle through the accumulated messages.
+
+Layering:
+    main () calls
+        handle_argument_errors () - to ensure that required arguments are
+                                    present
+        archive_files () - the wrapper that for each file path on the 
+                           command line calls
+            write_file () - initializes messaging system, determines the
+                            absolute and relative path of the file being
+                            archived and calls write_file_from_path (),
+                            then appends error messages to the standard error,
+                            deconstructs the messaging system and returns the
+                            status  
+                write_file_from_path () - formats a correct ustar header block,
+                                          then either write the file contents
+                                          or recursively descends (depth-first)
+                                          if it is a directory
+        
+File Structure:
+
+tarc.c - main (), archive_files () and service functions for error printout
+tarutils.h - defines constants, error message formats and externally visible
+    function signatures
+tarutils.c - contains the principal functionality, including the formatting
+of correct header and content blocks, logic for handling recursive writing
+of directories, and error reporting
+msgutils.h - defines externally visible function signatures for the messaging
+    system
+msgutils.c - the quick message reporting package, featuring reallocatable
+    message buffer; is not thread-safe
+

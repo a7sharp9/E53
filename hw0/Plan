@@ -1,0 +1,43 @@
+Design Document for more03
+-----------------------------------------------------------
+Code by: Yuri Machkasov
+Date: 01/30/2018
+History: Version 0.1
+-----------------------------------------------------------
+
+Purpose:
+
+The purpose of more03 is to extend the 'more02' version of more
+by adding new features:
+
+   [a] no need to press Enter to have program receive a keystroke
+   [b] program will work in any size terminal window
+   [c] program will work if window is resized when program is running
+
+Ouline:
+
+The program still has a main loop that reads the command line and processes
+files named there.  If no files are named on the command line, the program
+pages through data read from stdin.
+
+For each file, the program shows one screenful of lines, then asks the user
+what to do, reads a keystroke from the user.  Depending on the key pressed,
+the program quits, shows one more line of text, or shows one more screenful
+of text, then asks again.
+
+Features:
+To accomodate direct input of control characters, the program no longer reads user commands from standard input, utilizing instead the file descriptor for tty (through the utility function rawgetc ())
+The size of the terminal is no longer hardcoded, and is read instead from the system environment on startup (through the utility function get_term_size ())
+The number of lines to display for the next page of input (that is, when user chooses a space) is also dynamically calculated using the query for the screen size at each user interaction.
+
+Layering:
+
+	main ,for each file, calls:
+		do_more	-- which pages through a file calling
+			how_much_more -- to ask user how much more to show
+
+File Structure:
+
+	more03.c	-- the main three functions listed above, with the addition of two wrappers, pagelen () and pagewidth (),
+			around the utility function providing terminal size
+	termfuncs.c	-- a toolkit that provides access to terminal info and input

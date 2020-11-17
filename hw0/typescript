@@ -1,0 +1,146 @@
+Script started on Tue 30 Jan 2018 05:19:45 PM EST
+[?1034hbash-4.2$ ./more03 more03.c
+/*  more03.c  - version 0.3 of more
+ *	read and print as many lines ts the current terminal has, then pause for a few special commands
+ *	v03: reads user control cmds from /dev/tty, dynamically polls the terminal size
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include "termfuncs.h"
+#define  ERROR		1
+#define  SUCCESS	0
+#define	DEFAULT_PAGELEN 24
+#define	DEFAULT_PAGEWIDTH 80
+#define  has_more_data(x)   (!feof(x))
+#define	CTL_DEV	"/dev/tty"		/* source of control commands	*/
+
+int  do_more(FILE *);
+int  how_much_more(FILE *);
+int print_one_line(FILE *);
+int pagelen ();
+int pagewidth ();
+
+int main( int ac , char *av[] )
+{
+	FILE	*fp;			/* stream to view with more	*/
+	int	result = SUCCESS;	/* return status from main	*/
+[7m more? [m
+	if ( ac == 1 )
+		result = do_more( stdin );
+	else
+		while ( result == SUCCESS && --ac )
+			if ( (fp = fopen( *++av , "r" )) != NULL ) {
+				result = do_more( fp ) ; 
+				fclose( fp );
+			}
+			else
+				result = ERROR;
+	return result;
+}
+
+/*  pagelen -- query the length of the terminal window, in lines
+ *      args: none
+ *      rets: the number of lines, or the default for vt100 
+ *      if system call failed
+ */
+int pagelen () {
+	int 	termsize [2];
+	int	ret_value = DEFAULT_PAGELEN;
+	if (get_term_size (termsize) != -1)
+		ret_value = termsize [0];
+[7m more? [m	return (ret_value);
+[7m more? [m}
+[7m more? [m
+[7m more? [m/*  pagewidth -- query the width of the terminal window, in characters
+ *      args: none
+ *      rets: the number of characters, or the default for vt100 
+ *      if system call failed
+ */
+int pagewidth () {
+	int 	termsize [2];
+	int	ret_value = DEFAULT_PAGEWIDTH;
+	if (get_term_size (termsize) != -1)
+		ret_value = termsize [1];
+	return (ret_value);
+}
+
+/*  do_more -- show a page of text, then call how_much_more() for instructions
+ *      args: FILE * opened to text to display
+ *      rets: SUCCESS if ok, ERROR if not
+ */
+int do_more( FILE *fp )
+{
+	int	space_left = pagelen () ;	/* space left on screen */
+	int	reply;				/* user request		*/
+	FILE	*fp_tty;			/* stream to keyboard	*/
+
+	fp_tty = fopen( CTL_DEV, "r" );		/* connect to keyboard	*/
+[7m more? [m	while ( has_more_data( fp ) ) {		/* more input	*/
+		if ( space_left <= 0 ) {		/* screen full?	*/
+			reply = how_much_more(fp_tty);	/* ask user	*/
+			if ( reply == 0 )		/*    n: done   */
+				break;
+			space_left = reply;		/* reset count	*/
+		}
+		int num_lines_printed = print_one_line( fp );
+		space_left -= num_lines_printed;	/* count it	*/
+	}
+	fclose( fp_tty );			/* disconnect keyboard	*/
+	return SUCCESS;				/* EOF => done		*/
+}
+
+/*  print_one_line(fp) -- copy data from input to stdout until \n or EOF
+ *      args: FILE *  - the file to copy the next line from
+ *      rets: the number of screen lines taken up by printing one line from
+ *      this file
+ */
+int print_one_line( FILE *fp )
+{
+	int	page_width = pagewidth ();	/* will query the device */
+	int	num_printed = 0;
+	int	c;
+[7m more? [mbash-4.2$ last | ./more03[Kbash-4.2$ last | ./more03
+ymachkas pts/1                         Tue Jan 30 17:19   still logged in   
+ymachkas pts/0        10.39.222.34     Tue Jan 30 14:02   still logged in   
+ymachkas pts/0        10.39.222.34     Tue Jan 30 14:01 - 14:02  (00:01)    
+ymachkas pts/0        dhcp-10-137-167- Thu Jan 25 11:25 - 18:26  (07:00)    
+jbusconi pts/0        bus00agv.us.orac Sun Jan 21 10:49 - 12:06  (01:17)    
+reboot   system boot  4.1.12-112.14.13 Sat Jan 20 01:56 - 17:20 (10+15:24)  
+reboot   system boot  4.1.12-61.1.16.e Sat Dec 23 00:05 - 01:55 (28+01:50)  
+ymachkas pts/0        dhcp-10-137-167- Thu Dec 21 10:15 - 20:26  (10:11)    
+ymachkas pts/0        dhcp-10-137-167- Wed Dec 20 10:27 - 10:29  (00:02)    
+root     pts/0        dlsun384.us.orac Fri Dec  1 15:39 - 15:39  (00:00)    
+root     pts/0        dlsun384.us.orac Wed Nov 29 02:28 - 02:28  (00:00)    
+root     pts/0        dlsun384.us.orac Tue Nov 28 20:13 - 20:13  (00:00)    
+[7m more? [mreboot   system boot  4.1.12-61.1.16.e Sat Oct 28 21:31 - 01:55 (83+05:23)  
+jbusconi pts/0        bus00clp.us.orac Wed Oct 25 12:01 - 12:01  (00:00)    
+root     pts/0        dlsun385.us.orac Mon Oct  9 04:04 - 04:05  (00:00)    
+jbusconi pts/0        bus00clp.us.orac Mon Aug  7 13:16 - 13:16  (00:00)    
+reboot   system boot  4.1.12-61.1.16.e Sat Jul 29 21:25 - 21:50 (90+00:25)  
+root     pts/0        dlsun385.us.orac Tue Jul 25 22:28 - 22:28  (00:00)    
+reboot   system boot  4.1.12-61.1.16.e Sat Apr 29 00:21 - 21:07 (91+20:46)  
+root     pts/0        dlsun385.us.orac Tue Apr 25 01:17 - 02:24  (01:07)    
+ymachkas pts/1        dhcp-adc-twvpn-3 Tue Apr 18 15:26 - 19:28  (04:01)    
+gferro   pts/0        dhcp-cambridge2- Tue Apr 18 15:18 - 18:29  (03:11)    
+reboot   system boot  4.1.12-61.1.16.e Tue Apr 18 12:12 - 21:07 (102+08:54) 
+ymachkas pts/0        dhcp-adc-twvpn-3 Tue Apr 18 09:45 - 12:10  (02:25)    
+[7m more? [mymachkas pts/0        dhcp-cambridge2- Thu Feb 23 15:57 - 16:13  (00:16)    
+jbusconi pts/0        busgt0612.us.ora Mon Jan 30 10:49 - 10:49  (00:00)    
+jbusconi pts/0        busgt0612.us.ora Mon Jan 30 08:30 - 08:30  (00:00)    
+reboot   system boot  4.1.12-61.1.16.e Fri Dec 30 14:54 - 21:07 (211+05:12) 
+ymachkas pts/0        :1               Mon Nov 28 15:06 - 04:01 (28+12:55)  
+ymachkas pts/0        :1               Thu Nov 10 16:13 - 11:26 (17+19:13)  
+ymachkas pts/0        dhcp-cambridge2- Thu Nov 10 14:26 - 14:34  (00:08)    
+ymachkas pts/0        dhcp-cambridge2- Thu Nov 10 09:58 - 09:59  (00:00)    
+ymachkas pts/0        dhcp-cambridge2- Wed Nov  9 15:56 - 16:27  (00:31)    
+reboot   system boot  4.1.12-32.2.3.el Sat Nov  5 12:01 - 21:07 (266+09:05) 
+ymachkas pts/0        dhcp-cambridge2- Fri Nov  4 16:47 - 16:57  (00:09)    
+ymachkas pts/0        dhcp-cambridge2- Fri Nov  4 15:18 - 15:20  (00:01)    
+[7m more? [mreboot   system boot  4.1.12-32.2.3.el Fri Nov  4 11:56 - 21:07 (267+09:11) 
+[7m more? [m
+[7m more? [mwtmp begins Fri Nov  4 11:56:15 2016
+
+bash-4.2$ exit
+exit
+
+Script done on Tue 30 Jan 2018 05:20:50 PM EST

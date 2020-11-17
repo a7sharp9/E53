@@ -1,0 +1,31 @@
+
+README for smsh
+
+  Student: Yuri Machkasov
+  Date: 04/14/2018
+
+Summary:
+
+  This submission contains the files:
+
+    smsh.c    -- main and the top-level processing routine calling
+				the parsing and command execution functions
+    builtin.h, builtin.c -- declarations and functions dealing with
+				handling of the shell builtin commands
+    controlflow.h, controlflow.c -- declarations and functions dealing with
+				handling of the if-then-else-fi command flow
+	process.c, process.h -- command processing layer; handles executions
+				of external commands
+    Makefile    -- the makefile; builds the target
+    Plan        -- a description of the design and operation of my code
+	typescript -- shows the building of the "clean" and the default target
+    README -- this file
+
+	these are taken unchanged from the "smsh5" code:
+	smsh5.c, smsh.h - shell setup (main () deleted)
+	flexstr.c, flexstr.h - reallocatable string package
+	splitline.c, splitline.h - command line tokenizer
+	varlib.c, varlib.h - name-value storage and lookup package
+
+Please set tabstop to 4 to view
+

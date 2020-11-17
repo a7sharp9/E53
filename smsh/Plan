@@ -1,0 +1,81 @@
+Design Document for smsh
+-----------------------------------------------------------
+Code by: Yuri Machkasov
+Date: 04/14/2018
+History: Version 0.1
+-----------------------------------------------------------
+
+Please set tabstop to 4 to view.
+
+Purpose:
+	The purpose of smsh is to implement the basic functionality of a command 
+shell - an ability to execute external commands and/or scripts (files
+containing commands), handle simple control flow (one-level if-then-else-fi
+blocks), allow variable substitution, and perform a small subset of built-in
+commands (changing working direstory, sourcing scripts and setting or 
+printing variable values)
+
+Outline:
+	main () prepares the environment variable table, records the shell process
+id, determines if it should read the commands interactively or from a 
+script, then calls the main processing loop which processes the commands
+one by one. For each command we perform the inline substitution of any
+variables that are present on the command line, then parse it into tokens and
+call the processing function.
+	To process a single command, the shell recognizes the following cases:
+- source a script file ('.'): read the file line by line as if the commands
+in it were being read from standard input, and execute them.
+- execute a single command ('exec'): pass the control to another command and
+terminate the shell
+(Note: these two options can allow for recursion)
+- control flow statement ('if', 'then', 'else', 'fi'): provide for conditional
+execution, depending on the result of the command following 'if'
+- a built-in command
+	the shell recognizes the following commands as built-in, and executes them
+	in the same process:
+		cd - changes the working directory of the shell process
+		expressions of the format <variable name>=<value> - adds the
+			name-value pair to the variable table
+		set - prints out the variable table
+		export - pushes the value of the variable to the global environment
+		read - reads a line from the standard input and stores it in a
+			variable
+		exit - terminates the shell with the specified exit code
+- everything else is treated as an external command and executed in the
+regular fork-execvp-wait fashion
+
+Features:
+The shell utilizes the external flexstr package for expandable strings,
+splitline package for tokenizing command line and varlib
+package for manipulating the variable table.
+The control flow handling does not allow for nested if blocks.
+
+File Structure:
+	smsh.c - main () and the main loop, reading lines from input and
+		calling the processing functions on each
+	builtin.c - handling the builtin commands; also contains the
+		variable substitution handling
+	builtin.h - defines externally visible function signatures for the
+		builting package and the varsub () for variable substitution
+	controlflow.c - handling the if-then-else-fi control flow
+	controlflow.h - defines externally visible function signatures for the
+		control flow package
+	process.c - contains the principal command execution logic
+	process.h - defines externally visible function signatures for the
+		command processing package
+
+	the rest of the code is being reused unchanged from the lecture example
+	
+Notes:
+	The shell, when invoking a command, waits for its termination before
+resuming execution. This is not always desirable; sometimes the command
+might take a long time, or we might not be interested in its behavior or
+results once it is invoked. Regular shells have the ability to run programs
+"in the background" - that is, starting a command and immediately returning
+control back to the shell. This is usually indicated by appending "&" to the
+end of the command line. To duplicate this functionality, we would need to
+1. in execute, check if the last token is "&"
+2. if so, then in the "parent" branch of fork (), instead of calling wait (),
+print out the pid and set the return value to 0 
+	
+

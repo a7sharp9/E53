@@ -1,0 +1,31 @@
+
+README for wsng
+
+  Student: Yuri Machkasov
+  Date: 04/24/2018
+
+Summary:
+
+  This submission contains the files:
+
+    wsng.c    -- main loop; also contains the functions for the parsing of the 
+				command line, reading and parsing configuration
+				options, setting up the server structure, response
+				handlers and signal handlers, and the top-level wrapper around
+				the request processing 
+    process.h, process.c -- declarations and functions to construct HTTP
+				response and writing it to the socket
+    Makefile    -- the makefile; builds the target
+    Plan        -- a description of the design and operation of my code
+	typescript -- shows the building of the "clean" and the default target, and
+			tests the functionality by sending requests through TELNET
+    README -- this file
+
+	these functions are taken unchanged from the "ws" code:
+	read.c, read.h - utilities for reading the request and expanding localhost
+						host name
+	socklib.c, socklib.h - utilities for building network address, binding it
+		to the socket and listening on it
+
+Please set tabstop to 4 to view
+

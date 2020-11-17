@@ -1,0 +1,297 @@
+/*
+ * tarutils.c
+ *
+ *  Created on: Feb 12, 2018
+ *      Author: Yuri
+ */
+
+#include <tar.h>
+#include <stdio.h>
+#include <time.h>
+#include <string.h>
+#include <pwd.h>
+#include <grp.h>
+#include <dirent.h>
+
+#include "tarutils.h"
+
+struct file_info {
+	char abs_path[PATH_MAX];
+	char rel_path[PATH_MAX];
+	char msg [PATH_MAX];
+};
+
+/**
+ * convert_file_mode - converts the bitmask file attribute from struct stat
+ * into a character flag defined in tar.h
+ *
+ * args:
+ * mode - attribute bitmask
+ * return:
+ * one of *TYPE types from tar.h, or -1 if the type is not handled
+ */
+char convert_file_mode (__mode_t mode) {
+	char ret = -1;
+	if (S_ISREG (mode))
+		ret = REGTYPE;
+	else if (S_ISDIR (mode))
+		ret = DIRTYPE;
+	else if (S_ISFIFO (mode))
+		ret = FIFOTYPE;
+	else if (S_ISLNK (mode))
+		ret = SYMTYPE;
+
+	return (ret);
+}
+
+/**
+ * calculate_block_checksum - arithmetically adds the first BLOCKSIZE
+ * characters in a buffer
+ *
+ * args:
+ * buf - a buffer of at least BLOCKSIZE characters
+ * return:
+ * an integer sum of all character values
+ */
+unsigned calculate_block_checksum (char *buf) {
+	int idx;
+	int ret = 0;
+	for (idx = 0; idx < BLOCKSIZE; idx ++) {
+		ret += buf [idx];
+	}
+
+	return (ret);
+}
+
+int return_with_msg (int err, char *msg_buf, char *file_path) {
+	sprintf (msg_buf, tar_err_message_formats [err], file_path);
+	return (err);
+}
+
+int return_print_msg (char *prog_name, int err, char *msg_buf, char *file_path) {
+	if (err) {
+		if (msg_buf [0] == 0)
+			return_with_msg (err, msg_buf, file_path);
+		fprintf (stderr, "%s: %s\n", prog_name, msg_buf);
+	}
+
+	return (err);
+}
+
+int format_symlink_name (char *buf, struct file_info *path, int mode) {
+	if (mode == SYMTYPE) {
+		char	link_name [PATH_MAX];
+		int link_length = readlink (path->abs_path, link_name, PATH_MAX);
+		if (link_length > TAR_NAME_MAX_LENGTH)
+			return (return_with_msg (TAR_ERR_NAME_TOO_LONG,
+										path->msg, link_name));
+
+		sprintf (buf + 157, "%s", link_name);
+	}
+
+	return (0);
+}
+
+void format_file_stats (char *buf, struct stat *stat_buffer, char mode) {
+	sprintf (buf + 100, "%07o", (stat_buffer->st_mode & 0777));
+	sprintf (buf + 108, "%07o", ((unsigned) stat_buffer->st_uid));
+	sprintf (buf + 116, "%07o", ((unsigned) stat_buffer->st_gid));
+	sprintf (buf + 124, "%011o", (mode == REGTYPE) ?
+									((unsigned) stat_buffer->st_size) : 0);
+	sprintf (buf + 136, "%011o", ((unsigned) stat_buffer->st_mtim.tv_sec));
+	struct passwd *userpwd = getpwuid (stat_buffer->st_uid);
+	sprintf (buf + 265, "%s", userpwd->pw_name);
+	struct group *usergrp = getgrgid (stat_buffer->st_gid);
+	sprintf (buf + 297, "%s", usergrp->gr_name);
+}
+
+void format_ustar_magic (char *buf) {
+	sprintf (buf + 257, "%s", TMAGIC);
+	buf [263] = buf [264] = '0';
+
+	sprintf (buf + 329, "%s", "0000000");
+	sprintf (buf + 337, "%s", "0000000");
+}
+
+/**
+ * format_header_block - writes out ustar-standard tar header for the incoming
+ * file into the provided buffer
+ *
+ * args:
+ * buf - the buffer of at least BLOCKSIZE characters
+ * path - the relative (to program invocation) and absolute path to the file
+ * being archived
+ *
+ * return: 0 if successful, one of the TAR_ERR_* constants otherwise
+ */
+int format_header_block (char *buf, struct file_info *path) {
+	memset (buf, 0, BLOCKSIZE);
+
+	struct stat stat_buffer;
+	if (lstat (path->abs_path, &stat_buffer))
+		return (return_with_msg (TAR_ERR_CANNOT_STAT,
+									path->msg, path->rel_path));
+
+	char mode = convert_file_mode (stat_buffer.st_mode);
+	if (mode < 0)
+		return (return_with_msg (TAR_ERR_TYPE_UNIMPLEMENTED,
+									path->msg, path->rel_path));
+
+
+	sprintf (buf, "%-s", path->rel_path);
+	format_file_stats (buf, &stat_buffer, mode);
+
+	buf [156] = mode;
+	if (format_symlink_name (buf, path, mode))
+		return (TAR_ERR_NAME_TOO_LONG); /* message already set */
+
+	format_ustar_magic (buf);
+
+	memset (buf + 148, ' ', 8);
+	int checksum = calculate_block_checksum (buf);
+	sprintf (buf + 148, "%06o", checksum);
+
+	return (0);
+
+}
+
+int write_contents (int into_fd, struct file_info *path) {
+	int from_fd = open (path->abs_path, O_RDONLY);
+	if (from_fd < 0)
+		return (return_with_msg (TAR_ERR_CANNOT_OPEN,
+									path->msg, path->rel_path));
+
+	char buf [BLOCKSIZE];
+	int num_read;
+	while ((num_read = read (from_fd, buf, BLOCKSIZE)) > 0) {
+		if (num_read < BLOCKSIZE)
+			memset (buf + num_read, 0, BLOCKSIZE - num_read);
+		write (into_fd, buf, BLOCKSIZE);
+	}
+
+	close (from_fd);
+	return (0);
+}
+
+int write_header_block (int into_fd, struct file_info *path) {
+	char header_block [BLOCKSIZE];
+	int ret = format_header_block (header_block, path);
+	if (!ret)
+		write (into_fd, header_block, BLOCKSIZE);
+	return (ret);
+}
+
+void write_empty_block (int fd, int how_many) {
+	char buf [BLOCKSIZE];
+	memset (buf, 0, BLOCKSIZE);
+	int idx;
+	for (idx = 0; idx < how_many; idx ++) {
+		write (fd, buf, BLOCKSIZE);
+	}
+}
+
+void ensure_slash (char *path) {
+	char *path_end = path + strlen (path);
+
+	if (*(path_end - 1) != '/') {
+		*path_end = '/';
+		*(path_end + 1) = 0;
+	}
+}
+
+void add_path_entry (char *path, char *entry) {
+	char *path_end = path + strlen (path);
+	sprintf (path_end, entry);
+}
+
+int write_file_from_path (char *prog_name,
+							int into_fd, struct file_info *path);
+
+int write_dir_contents (char *prog_name, int into_fd, struct file_info *path) {
+	int ret = 0;
+	DIR *dir_ptr = opendir (path->abs_path);
+	if (dir_ptr != NULL) {
+		struct dirent *dir_entry;
+		while ((dir_entry = readdir (dir_ptr)) != NULL) {
+			char *entry_name = dir_entry->d_name;
+			if (strcmp (entry_name, ".") && strcmp (entry_name, "..")) {
+				struct file_info new_path;
+				memcpy (&new_path, path, sizeof (struct file_info));
+				add_path_entry (new_path.abs_path, entry_name);
+				add_path_entry (new_path.rel_path, entry_name);
+				int recursive_ret = write_file_from_path (prog_name,
+												into_fd, &new_path);
+				if (recursive_ret) {
+					ret = recursive_ret;
+				}
+			}
+		}
+	} else {
+		return (return_print_msg (prog_name, TAR_ERR_CANNOT_READDIR,
+									path->msg, path->rel_path));
+	}
+
+	path->msg [0] = 0;
+	return (ret);
+}
+
+int write_file_from_path (char *prog_name,
+							int into_fd, struct file_info *path) {
+	int ret = 0;
+	struct stat stat_buffer;
+
+	if (lstat (path->abs_path, &stat_buffer))
+		return (return_print_msg (prog_name, TAR_ERR_CANNOT_STAT,
+									path->msg, path->rel_path));
+
+	int isdir = S_ISDIR (stat_buffer.st_mode);
+
+	if (isdir) {
+		ensure_slash (path->abs_path);
+		ensure_slash (path->rel_path);
+	}
+
+	ret = write_header_block (into_fd, path);
+	if (ret)
+		return (return_print_msg (prog_name, ret, path->msg, path->rel_path));
+
+	if (isdir) {
+		ret = write_dir_contents (prog_name, into_fd, path);
+	} else if (S_ISREG (stat_buffer.st_mode)) {
+		ret = write_contents (into_fd, path);
+		return_print_msg (prog_name, ret, path->msg, path->rel_path);
+	}
+
+	return (ret);
+}
+
+int write_file (char *prog_name, int fd, char *fname) {
+	if (fname == NULL)
+		return (-1);
+
+	struct file_info fpath;
+	memset (fpath.msg, 0, sizeof (fpath.msg));
+	memset (fpath.abs_path, 0, sizeof (fpath.abs_path));
+	memset (fpath.rel_path, 0, sizeof (fpath.rel_path));
+
+	if (*fname == '/') {
+		memcpy (fpath.abs_path, fname, strlen (fname));
+		fprintf (stderr,
+					"%s: Removing leading '/' from member names", prog_name);
+		for (; *fname == '/'; fname ++) {}
+		memcpy (fpath.rel_path, fname, strlen (fname));
+	} else {
+		memcpy (fpath.rel_path, fname, strlen (fname));
+		getcwd (fpath.abs_path, sizeof (fpath.abs_path));
+		sprintf (fpath.abs_path + strlen (fpath.abs_path), "/%s", fname);
+	}
+
+	if (*fname == 0)
+		return (-1);
+
+	int ret = write_file_from_path (prog_name, fd, &fpath);
+
+	return (ret);
+}
+
+

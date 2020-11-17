@@ -1,0 +1,33 @@
+
+README for sttyl
+
+  Student: Yuri Machkasov
+  Date: 02/28/2018
+
+Summary:
+
+  This submission contains the files:
+
+    sttyl.c    -- the main () function as well as the wrapper for
+                  setting parameters specified in the command line
+    ttyutils.h -- signatures for the publicly visible functions from tarutils.c
+    ttyutils.c -- the principal logic for printing and setting tty properties
+    wordwrap.h -- signatures for the publicly visible function from
+                  wordwrap.c
+    wordwrap.c -- a simple word wrapper that provides (in most cases) the
+                  functionality to prevent lines from overflowing the screen
+                  width
+    Makefile   -- the makefile; builds the target
+    Plan       -- a description of the design and operation of the code
+    typescript -- a sample run, including the result of the test script
+                  and some boundary conditions not covered
+    README     -- this file
+
+  Please set tabstop to 4 to view.
+
+Notes:
+
+The word wrapper (1) does the wrapping in place, simply replacing a specified
+character (or the one next to it) with a CR, and (2) is consequently not smart 
+enough to break up words if the number of columns is less than the length of 
+the word being output; in this case, it'll wrap after the next word

@@ -1,0 +1,19 @@
+
+README for more03
+
+  Student: Yuri Machkasov
+  Date: 01/30/2018
+
+Summary:
+
+  This submission contains the files:
+
+    more03.c    -- my solution to the project
+    temrfuncs.h, termfuncs.c -- library for tty access
+    Makefile    -- the makefile
+    Plan        -- a description of the design and operation of my code
+    typescript  -- a sample run
+
+Notes:
+
+  
